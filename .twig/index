@@ -1,0 +1,22 @@
+[
+  {
+    "path": "sample.txt",
+    "hash": "7468458060564cb5569268b048cb9d61137f1705"
+  },
+  {
+    "path": "sample2.txt",
+    "hash": "04d7c03d503f132dcc2852a6dab36bfb307ced7d"
+  },
+  {
+    "path": "sample2.txt",
+    "manifestHash": "4d52cd38a9b26f8c7203f18b73d6577c291725e6"
+  },
+  {
+    "path": "big.bin",
+    "manifestHash": "591260ab5791adb3aca8f65ca1ba6c58d89e2b04"
+  },
+  {
+    "path": "sample2.txt",
+    "manifestHash": "4d52cd38a9b26f8c7203f18b73d6577c291725e6"
+  }
+]
