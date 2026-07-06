@@ -1,0 +1,1 @@
+{"time":"2026-07-05T18:47:03.440Z","message":"phase2-clean","files":[{"path":"sample.txt","manifestHash":"24f93e03256f4c2ae60bf287a0ccc9f8a7b3f7db"},{"path":"sample2.txt","manifestHash":"4d52cd38a9b26f8c7203f18b73d6577c291725e6"},{"path":"big.bin","manifestHash":"591260ab5791adb3aca8f65ca1ba6c58d89e2b04"}],"parent":"0589d77a12d396ca848d156df3970063f1ea88d6"}

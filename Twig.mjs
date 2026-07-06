@@ -19,7 +19,43 @@ class Twig{
 this.manifestPath = path.join(this.repoPath,'manifests');
         this.init();
     }
+    async loadCommit(commitHash){
 
+    const data =
+        await this.getCommitData(
+            commitHash
+        );
+
+    return JSON.parse(data);
+}
+async checkout(commitHash){
+
+    const commit =
+        await this.loadCommit(
+            commitHash
+        );
+
+    for(const file of commit.files){
+
+        await this.restoreFile(
+            file.manifestHash,
+            file.path
+        );
+
+        console.log(
+            `Restored ${file.path}`
+        );
+    }
+
+    await fs.writeFile(
+        this.headPath,
+        commitHash
+    );
+
+    console.log(
+        "\nCheckout completed."
+    );
+}
     async init(){
         await fs.mkdir(this.chunkPath,{recursive:true});
         await fs.mkdir(this.manifestPath,{recursive:true});
@@ -32,7 +68,7 @@ this.manifestPath = path.join(this.repoPath,'manifests');
             console.log('Twig repository already initialized.');
         }
     }
-    chunkFile(buffer, chunkSize = 64 * 1024) {
+    chunkFileFixed(buffer, chunkSize = 64 * 1024) {
 
     const chunks = [];
 
@@ -46,6 +82,57 @@ this.manifestPath = path.join(this.repoPath,'manifests');
                 i,
                 i + chunkSize
             )
+        );
+    }
+
+    return chunks;
+}
+chunkFileCDC(buffer){
+
+    const chunks = [];
+
+    const MIN = 16 * 1024;
+    const MAX = 256 * 1024;
+
+    let start = 0;
+    let hash = 0;
+
+    for(let i = 0; i < buffer.length; i++){
+
+        hash =
+            ((hash << 1) + buffer[i])
+            & 0xffffffff;
+
+        const size =
+            i - start + 1;
+
+        const boundary =
+            (hash & 0x1FFF) === 0;
+
+        if(
+            size >= MIN &&
+            (
+                boundary ||
+                size >= MAX
+            )
+        ){
+
+            chunks.push(
+                buffer.slice(
+                    start,
+                    i + 1
+                )
+            );
+
+            start = i + 1;
+            hash = 0;
+        }
+    }
+
+    if(start < buffer.length){
+
+        chunks.push(
+            buffer.slice(start)
         );
     }
 
@@ -165,6 +252,275 @@ catch{
 
     return hash;
 }
+async loadManifest(manifestHash){
+
+    const dir =
+        manifestHash.slice(0,2);
+
+    const file =
+        manifestHash.slice(2);
+
+    const manifestPath =
+        path.join(
+            this.manifestPath,
+            dir,
+            file
+        );
+
+    const data =
+        await fs.readFile(
+            manifestPath,
+            {encoding:'utf-8'}
+        );
+
+    return JSON.parse(data);
+}
+async loadChunk(chunkHash){
+
+    const dir =
+        chunkHash.slice(0,2);
+
+    const file =
+        chunkHash.slice(2);
+
+    const chunkPath =
+        path.join(
+            this.chunkPath,
+            dir,
+            file
+        );
+
+    return await fs.readFile(
+        chunkPath
+    );
+}
+async reconstructFile(manifestHash){
+
+    const manifest =
+        await this.loadManifest(
+            manifestHash
+        );
+
+    const buffers = [];
+
+    for(
+        const chunkInfo
+        of manifest.chunks
+    ){
+
+        const chunk =
+            await this.loadChunk(
+                chunkInfo.hash
+            );
+
+        buffers.push(chunk);
+    }
+
+    return Buffer.concat(buffers);
+}
+async restoreFile(
+    manifestHash,
+    outputPath
+){
+
+    const data =
+        await this.reconstructFile(
+            manifestHash
+        );
+
+    await fs.writeFile(
+        outputPath,
+        data
+    );
+}
+async stats(){
+
+    let chunkCount = 0;
+    let chunkBytes = 0;
+   
+
+    const dirs =
+        await fs.readdir(
+            this.chunkPath
+        );
+   
+    for(const dir of dirs){
+
+        const files =
+            await fs.readdir(
+                path.join(
+                    this.chunkPath,
+                    dir
+                )
+            );
+
+        chunkCount += files.length;
+
+        for(const file of files){
+
+            const stat =
+                await fs.stat(
+                    path.join(
+                        this.chunkPath,
+                        dir,
+                        file
+                    )
+                );
+
+            chunkBytes += stat.size;
+        }
+    }
+    let manifestCount = 0;
+
+const manifestDirs =
+    await fs.readdir(
+        this.manifestPath
+    );
+
+for(const dir of manifestDirs){
+
+    const files =
+        await fs.readdir(
+            path.join(
+                this.manifestPath,
+                dir
+            )
+        );
+
+    manifestCount += files.length;
+}
+
+
+    console.log(
+        "\nRepository Statistics"
+    );
+
+    console.log(
+        "---------------------"
+    );
+    console.log(
+    `Manifests : ${manifestCount}`
+);
+    console.log(
+        `Stored Chunks : ${chunkCount}`
+    );
+
+    console.log(
+        `Physical Size : ${chunkBytes} bytes`
+    );
+}
+async verify(){
+
+    const dirs =
+        await fs.readdir(
+            this.chunkPath
+        );
+
+    let valid = true;
+
+    for(const dir of dirs){
+
+        const files =
+            await fs.readdir(
+                path.join(
+                    this.chunkPath,
+                    dir
+                )
+            );
+
+        for(const file of files){
+
+            const hash =
+                dir + file;
+
+            const data =
+                await fs.readFile(
+                    path.join(
+                        this.chunkPath,
+                        dir,
+                        file
+                    )
+                );
+
+            const calculated =
+                this.hashChunk(data);
+
+            if(hash !== calculated){
+
+                valid = false;
+
+                console.log(
+                    `Corrupt chunk: ${hash}`
+                );
+            }
+        }
+    }
+
+    if(valid){
+
+        console.log(
+            "Repository Healthy"
+        );
+    }
+}
+async benchmark(filePath){
+
+    const data =
+        await fs.readFile(filePath);
+
+    const fixedChunks =
+        this.chunkFileFixed(data);
+
+    const cdcChunks =
+        this.chunkFileCDC(data);
+    const sizes =
+    cdcChunks.map(
+        c => c.length
+    );
+
+const min =
+    Math.min(...sizes);
+
+const max =
+    Math.max(...sizes);
+
+const avg =
+    sizes.reduce(
+        (a,b)=>a+b,
+        0
+    ) / sizes.length;
+
+    console.log(
+        "\nBenchmark Report"
+    );
+
+    console.log(
+        "----------------"
+    );
+
+    console.log(
+        `File Size : ${data.length}`
+    );
+
+    console.log(
+        `Fixed Chunks : ${fixedChunks.length}`
+    );
+
+    console.log(
+        `CDC Chunks   : ${cdcChunks.length}`
+    );
+    console.log(
+    `Min Chunk : ${min}`
+);
+
+console.log(
+    `Max Chunk : ${max}`
+);
+
+console.log(
+    `Avg Chunk : ${avg.toFixed(2)}`
+);
+}
 
    async add(fileToBeAdded){
 
@@ -172,7 +528,12 @@ catch{
         await fs.readFile(fileToBeAdded);
 
     const chunks =
-        this.chunkFile(fileData);
+    this.chunkFileCDC(fileData);
+    console.log(
+    chunks.map(
+        chunk => chunk.length
+    )
+);
 let newChunks = 0;
 let reusedChunks = 0;
     console.log(
@@ -212,6 +573,15 @@ console.log("----------------");
 console.log(`Total Chunks : ${chunks.length}`);
 console.log(`New Chunks   : ${newChunks}`);
 console.log(`Reused       : ${reusedChunks}`);
+const ratio =
+(
+    reusedChunks /
+    chunks.length
+) * 100;
+
+console.log(
+    `Dedup Ratio : ${ratio.toFixed(2)}%`
+);
 console.log(
     "\nManifest Hash:",
     manifestHash
@@ -402,6 +772,116 @@ program.command('log').action(async()=>{
 program.command('show <commitHash>').action(async(commitHash)=>{
     const twig = new Twig();
     await twig.showCommitDiff(commitHash);
+});
+program.command(
+    'manifest <hash>'
+)
+.action(async(hash)=>{
+
+    const twig =
+        new Twig();
+
+    const manifest =
+        await twig.loadManifest(hash);
+
+    console.log(manifest);
+
+});
+program.command(
+    'chunk <hash>'
+)
+.action(async(hash)=>{
+
+    const twig =
+        new Twig();
+
+    const chunk =
+        await twig.loadChunk(hash);
+
+    console.log(
+        "Chunk Size:",
+        chunk.length
+    );
+
+});
+program.command(
+    'cat-file <manifestHash>'
+)
+.action(async(manifestHash)=>{
+
+    const twig =
+        new Twig();
+
+    const data =
+        await twig.reconstructFile(
+            manifestHash
+        );
+
+    console.log(
+        data.toString()
+    );
+
+});
+
+program.command(
+    'restore <manifestHash> <file>'
+)
+.action(
+async(manifestHash,file)=>{
+
+    const twig =
+        new Twig();
+
+    await twig.restoreFile(
+        manifestHash,
+        file
+    );
+
+    console.log(
+        "File restored."
+    );
+});
+program.command(
+    'checkout <commitHash>'
+)
+.action(async(commitHash)=>{
+
+    const twig =
+        new Twig();
+
+    await twig.checkout(
+        commitHash
+    );
+
+});
+program.command('stats')
+.action(async()=>{
+
+    const twig =
+        new Twig();
+
+    await twig.stats();
+
+});
+program.command('verify')
+.action(async()=>{
+
+    const twig =
+        new Twig();
+
+    await twig.verify();
+
+});
+program.command(
+    'benchmark <file>'
+)
+.action(async(file)=>{
+
+    const twig =
+        new Twig();
+
+    await twig.benchmark(file);
+
 });
 
 program.parse(process.argv);
