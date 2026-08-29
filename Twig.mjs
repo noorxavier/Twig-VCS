@@ -16,7 +16,7 @@ class Twig{
         this.headPath = path.join(this.repoPath, 'HEAD');
         this.indexPath = path.join(this.repoPath, 'index');
         this.chunkPath = path.join(this.repoPath,'chunks');
-this.manifestPath = path.join(this.repoPath,'manifests');
+        this.manifestPath = path.join(this.repoPath,'manifests');
         this.init();
     }
     async loadCommit(commitHash){

@@ -1,14 +1,1 @@
-[
-  {
-    "path": "random.bin",
-    "manifestHash": "b924909736dda241ad0cac3e20df474309df494d"
-  },
-  {
-    "path": "random.bin",
-    "manifestHash": "55d37576b15ef6cd1532c9986e5e16c8592290f6"
-  },
-  {
-    "path": "random_v2.bin",
-    "manifestHash": "a7751c2f224a7d2da47fce337531fb951c15ce1f"
-  }
-]
+[]
